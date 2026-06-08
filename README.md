@@ -1,74 +1,132 @@
-# Advanced Agentic RAG System
+# Multi-Agentic RAG System
 
-A powerful, multi-agent Retrieval-Augmented Generation (RAG) application built with Streamlit, LangChain, and Groq LLMs. This project demonstrates a modular, self-correcting workflow for answering user queries using both internal knowledge sources and real-time web search, with built-in fact-checking and safety mechanisms.
+> Self-correcting multi-agent Retrieval-Augmented Generation system — hybrid retrieval with web search fallback, LangChain orchestration, Groq LLMs, and built-in fact-checking.
+
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?style=flat-square&logo=chainlink&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-LLM-F55036?style=flat-square&logo=groq&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.x-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-00B4D8?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+
+---
+
+## Overview
+
+This project implements a production-grade, **self-correcting multi-agent RAG pipeline** that intelligently routes queries across a network of specialized agents. Instead of a single monolithic retrieval step, the system chains dedicated agents for routing, retrieval, query reformulation, web search, synthesis, answer generation, fact-checking, and safety validation — producing high-quality, grounded answers even when the internal knowledge base falls short.
+
+---
+
+## Agent Architecture
+
+```
+User Query
+    │
+    ▼
+┌─────────┐
+│  Router │  ──── Classifies query intent and selects the optimal path
+└────┬────┘
+     │
+     ├──────────────────────┬──────────────────────┐
+     ▼                      ▼                      ▼
+┌──────────┐        ┌──────────────┐        ┌───────────┐
+│Retriever │        │ WebSearcher  │        │Clarifier  │
+│(Internal │        │  (Tavily)    │        │(Ask User) │
+│  KB)     │        └──────┬───────┘        └─────┬─────┘
+└────┬─────┘               │                      │
+     │                     │                      │
+     ▼                     │                      ▼
+┌─────────┐                │                   (End)
+│  Grader │  ──── Relevance score
+└────┬────┘
+     │
+     ├── relevant ──────────────────────────────┐
+     │                                          │
+     ├── reformulate ──► Reformulator ──► Retriever
+     │
+     └── fallback ──────► WebSearcher
+                               │
+                               ▼
+                        ┌────────────┐
+                        │Synthesizer │  ──── Merges retrieved + searched context
+                        └─────┬──────┘
+                              │
+                              ▼
+                        ┌───────────┐
+                        │ Generator │  ──── Drafts the final answer
+                        └─────┬─────┘
+                              │
+                              ▼
+                        ┌─────────────┐
+                        │ FactChecker │  ──── Verifies factual claims via web
+                        └─────┬───────┘
+                              │
+                              ▼
+                        ┌───────────────┐
+                        │ SafetyChecker │  ──── Detects / revises harmful content
+                        └─────┬─────────┘
+                              │
+                              ▼
+                          Answer ✓
+```
+
+### Agent Roles
+
+| Agent | Responsibility |
+|---|---|
+| **Router** | Classifies intent and selects the best workflow path |
+| **Retriever** | Fetches relevant chunks from the internal vector store |
+| **Grader** | Scores retrieved documents for relevance; triggers fallback if needed |
+| **Reformulator** | Rewrites the query for improved retrieval before retrying |
+| **WebSearcher** | Pulls real-time external information via Tavily API |
+| **Synthesizer** | Merges and de-duplicates context from multiple sources |
+| **Generator** | Produces the final natural-language answer |
+| **FactChecker** | Extracts factual claims and verifies them against live web results |
+| **SafetyChecker** | Screens output for harmful or inappropriate content; revises or blocks |
+| **Clarifier** | Asks the user a follow-up question when the query is ambiguous |
 
 ---
 
 ## Key Features
 
-- Multi-Agent Workflow: Modular agents for routing, retrieval, query reformulation, web search, synthesis, answer generation, fact-checking, and safety checking.
-- Hybrid Knowledge Sources: Supports both uploaded files (PDF, DOCX, TXT) and URLs as knowledge bases, with fallback to default sources.
-- Dynamic Query Handling: Automatically routes queries to the best agent (internal retrieval, web search, clarification, etc.) based on context.
-- Self-Correction: Reformulates queries and retries retrieval before falling back to web search.
-- Fact-Checking: Extracts factual claims from generated answers and verifies them using real-time web search.
-- Safety Checking: Analyzes generated content for harmful or inappropriate material and revises or blocks unsafe responses.
-- Interactive UI: Streamlit-based chat interface with workflow visualization, logs, and configuration sidebar.
-- Configurable Parameters: Easily adjust chunk size, retriever top-K, and LLM temperature from the sidebar.
+- **Multi-agent orchestration** — LangGraph-powered directed agent graph with conditional edges and retry loops
+- **Hybrid knowledge sources** — Ingest PDFs, DOCX, TXT files, and URLs into a ChromaDB vector store; falls back to live web search automatically
+- **Self-correcting pipeline** — Query reformulation and relevance grading before escalating to web search
+- **Integrated fact-checking** — Extracted claims are verified in real time via Tavily search
+- **Safety layer** — Every generated response passes through a safety filter before reaching the user
+- **Interactive Streamlit UI** — Chat interface with live workflow logs, execution trace, and configurable sidebar
+- **Configurable parameters** — Chunk size, retriever top-K, and LLM temperature adjustable at runtime
 
 ---
 
-## Architecture and Workflow
+## Tech Stack
 
-```mermaid
-flowchart TD
-    Start([Start]) --> Router
-    Router -->|retrieve| Retriever
-    Router -->|reformulate| Reformulator
-    Router -->|web_search| WebSearcher
-    Router -->|clarify| Clarifier
-    Router -->|generate| Generator
-    Retriever --> Grader
-    Grader -->|relevant| Synthesizer
-    Grader -->|reformulate| Reformulator
-    Grader -->|web_search| WebSearcher
-    Grader -->|clarify| Clarifier
-    Reformulator --> Retriever
-    Reformulator -->|fallback| WebSearcher
-    WebSearcher --> Synthesizer
-    Synthesizer --> Generator
-    Generator --> FactChecker
-    FactChecker --> SafetyChecker
-    SafetyChecker --> End([End])
-    Clarifier --> End
-```
-
-**Agent Roles:**
-- Router: Decides the best workflow path for each query.
-- Retriever: Fetches relevant documents from the internal knowledge base.
-- Reformulator: Improves queries for better retrieval.
-- WebSearcher: Finds real-time, external information.
-- Synthesizer: Combines information from various sources.
-- Generator: Creates the final answer.
-- FactChecker: Verifies factual claims in the generated answer.
-- SafetyChecker: Ensures generated content is safe and appropriate.
-- Clarifier: Asks user for more details if needed.
+| Layer | Technology |
+|---|---|
+| LLM Provider | Groq (`llama3-70b-8192`, `mixtral-8x7b`) |
+| Orchestration | LangChain + LangGraph |
+| Vector Store | ChromaDB |
+| Web Search | Tavily API |
+| Embeddings | Google Generative AI Embeddings |
+| Frontend | Streamlit |
+| Language | Python 3.9+ |
 
 ---
 
-## Installation and Setup
+## Installation & Setup
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/satapathyPro/agentic-rag-system.git
-cd agentic-rag-system
+git clone https://github.com/satapathyPro/multi-agentic-rag.git
+cd multi-agentic-rag
 ```
 
 ### 2. Create a Virtual Environment
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
 ```
 
 ### 3. Install Dependencies
@@ -77,93 +135,98 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Note: This project requires Python 3.9+.
+> Requires Python 3.9+
 
-### 4. Set Up API Keys
+### 4. Configure API Keys
 
-Create a .streamlit/secrets.toml file in the project root with the following content:
+Create `.streamlit/secrets.toml` in the project root:
 
 ```toml
-LANGCHAIN_API_KEY = "your_langchain_api_key"
-TAVILY_API_KEY = "your_tavily_api_key"
-GOOGLE_API_KEY = "your_google_api_key"
-GROQ_API_KEY = "your_groq_api_key"
+GROQ_API_KEY        = "your_groq_api_key"
+TAVILY_API_KEY      = "your_tavily_api_key"
+GOOGLE_API_KEY      = "your_google_api_key"
+LANGCHAIN_API_KEY   = "your_langsmith_api_key"   # optional, for tracing
 ```
 
-- Get your API keys from:
-  - LangChain (https://smith.langchain.com/)
-  - Tavily (https://app.tavily.com/)
-  - Google Generative AI (https://ai.google.dev/)
-  - Groq (https://console.groq.com/)
+| Key | Where to get it |
+|---|---|
+| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com/) |
+| `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
+| `GOOGLE_API_KEY` | [ai.google.dev](https://ai.google.dev/) |
+| `LANGCHAIN_API_KEY` | [smith.langchain.com](https://smith.langchain.com/) |
 
-### 5. Run the Application
+### 5. Run the App
 
 ```bash
 streamlit run app.py
 ```
 
+Open [http://localhost:8501](http://localhost:8501) in your browser.
+
 ---
 
 ## Usage
 
-1. Configure Knowledge Sources:
-   - Add URLs (one per line) and/or upload files (TXT, PDF, DOCX) in the sidebar.
-   - Adjust chunk size, retriever K, and LLM temperature as needed.
-   - Click "Apply Parameters and Update Knowledge" to refresh the knowledge base.
+1. **Load knowledge sources** — In the sidebar, paste URLs (one per line) and/or upload files (PDF, DOCX, TXT). Click **"Apply Parameters and Update Knowledge"**.
 
-2. Chat:
-   - Enter your question in the chat input.
-   - The system will process your query through the multi-agent workflow and display the answer.
-   - View workflow logs, knowledge sources, and a diagram of the agent flow in the "Execution Details" section.
+2. **Ask a question** — Type your query in the chat input. The system routes it through the agent graph and streams back a grounded, fact-checked answer.
 
-3. Reset:
-   - Use "Clear Chat History" to reset the conversation and logs.
+3. **Inspect the trace** — Expand **"Execution Details"** beneath each response to see which agents ran, relevance grades, reformulation attempts, and safety decisions.
+
+4. **Tune parameters** — Adjust chunk size, retriever K, and LLM temperature from the sidebar at any time; click Apply to rebuild the index.
+
+5. **Reset** — Use **"Clear Chat History"** to start a fresh session.
 
 ---
 
-## Requirements
+## Project Structure
 
-- Python 3.9+
-- Streamlit
-- LangChain
-- Groq LLMs
-- Tavily API
-- Google Generative AI API
-- ChromaDB
-- Other dependencies as listed in requirements.txt
+```
+multi-agentic-rag/
+├── app.py                  # Streamlit entry point
+├── agents/
+│   ├── router.py           # Query intent classifier
+│   ├── retriever.py        # Vector-store retrieval agent
+│   ├── grader.py           # Relevance grader
+│   ├── reformulator.py     # Query rewriter
+│   ├── web_searcher.py     # Tavily-backed web search agent
+│   ├── synthesizer.py      # Context merger
+│   ├── generator.py        # Answer generator
+│   ├── fact_checker.py     # Claim verifier
+│   ├── safety_checker.py   # Safety filter
+│   └── clarifier.py        # Disambiguation agent
+├── graph/
+│   └── workflow.py         # LangGraph agent graph definition
+├── knowledge/
+│   └── loader.py           # Document ingestion and chunking
+├── requirements.txt
+└── .streamlit/
+    └── secrets.toml        # API keys (not committed)
+```
 
 ---
 
 ## Customization
 
-- Add More Agents: Extend the workflow by adding new agent nodes and decision logic.
-- Change LLMs: Swap out LLM providers or models by modifying the agent functions.
-- Integrate More Tools: Add new retrieval or search tools as needed.
+- **Swap LLMs** — Change the model name in any agent file to use a different Groq model (e.g., `llama-3.1-8b-instant` for speed).
+- **Replace the vector store** — Swap ChromaDB for Pinecone, FAISS, or Weaviate by updating `knowledge/loader.py`.
+- **Add agents** — Insert new nodes into `graph/workflow.py` and wire conditional edges as needed.
+- **Change the search provider** — Replace Tavily with SerpAPI, Bing, or DuckDuckGo by modifying `agents/web_searcher.py`.
 
 ---
 
 ## License
 
-MIT License
-
----
-
-## Acknowledgements
-
-- LangChain (https://github.com/langchain-ai/langchain)
-- Streamlit (https://streamlit.io/)
-- Groq (https://groq.com/)
-- Tavily (https://tavily.com/)
-- Google Generative AI (https://ai.google.dev/)
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## About the Developer
 
-**Subham Satapathy**
-Software Engineer
-Email: satapathypro@gmail.com
-GitHub: https://github.com/satapathyPro
-LinkedIn: https://www.linkedin.com/in/subhamumd/
+**Subham Satapathy** — Software Engineer with 6+ years building cloud-scale distributed systems and production-grade AI automation.
 
-Subham is a Software Engineer with over 6 years of experience building cloud-scale distributed systems and production-grade AI automation. This project reflects his interest in LLM-orchestrated workflows, system observability, and building robust, self-correcting agentic systems.
+- GitHub: [satapathyPro](https://github.com/satapathyPro)
+- LinkedIn: [subhamumd](https://www.linkedin.com/in/subhamumd/)
+- Email: satapathypro@gmail.com
+
+> This project reflects an interest in LLM-orchestrated workflows, system observability, and robust self-correcting agentic pipelines.
